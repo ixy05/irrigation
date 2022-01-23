@@ -144,7 +144,7 @@ void ntpUpdate()
 
 void handleRoot()
 {
-  server.send(200, "text/html", "<p>enter the hour and minute the system should start watering and the duration of how long it will water for</p></br><form action=\"/save\" method=\"POST\"><input type=\"text\" name=\"hour\" placeholder=\"hour eg. 18\"></br><input type=\"text\" name=\"minute\" placeholder=\"minute eg. 44\"></br><input type=\"text\" name=\"duration\" placeholder=\"duration eg. 3\"></br><input type=\"submit\" value=\"submit\"></form>");
+  server.send(200, "text/html", "<p>click the button below to view detailed instructions</p><form action=\"/info\" method=\"GET\"><input type=\"submit\" value=\"View Instructions\"></form></br><p>timer 1</p><form action=\"/save\" method=\"POST\"><input type=\"text\" name=\"hour1\" placeholder=\"hour\"></br><input type=\"text\" name=\"minute1\" placeholder=\"minutes\"></br><input type=\"text\" name=\"duration\" placeholder=\"duration eg. 3\"></br><input type=\"submit\" value=\"submit\"></form></br><p>timer 2 (set duration to 0 to disable)</p><form action=\"/save\" method=\"POST\"><input type=\"text\" name=\"hour\" placeholder=\"hour\"></br><input type=\"text\" name=\"minute\" placeholder=\"minute\"></br><input type=\"text\" name=\"duration\" placeholder=\"duration\"></br><input type=\"submit\" value=\"submit\"></form>");
 }
 
 void handleForm1()
