@@ -1,26 +1,22 @@
-#include <ESP8266WiFi.h>
+//#include <ESP8266WiFi.h>
+#include <WiFiManager.h> // https://github.com/tzapu/WiFiManager
 #include <ESP8266WebServer.h>
+#include <ESP8266mDNS.h>
 #include <NTPClient.h>
 #include <WiFiUDP.h>
 #include <TimeLib.h>
 #include <TimeAlarms.h>
 #include <EEPROM.h>
 
-// WiFi credentials for your router
-const char* ssid = "XXXXXXXXXXXXXX";
-const char* password = "YYYYYYYYYYYYY";
-
-/*
-  -------------------------------------
-      DO NOT CHANGE ANYTHING BELOW
-   ------------------------------------
-*/
 // http://lucstechblog.blogspot.com/2020/02/alarm-using-time-and-timealarms.html
 
 /*
    TO DO
-   - mDNS
-   - wifiManager
+   - mDNS ✓ (http://irrigation.local)
+   - add information and instructions page ✓
+   - wifiManager ✓
+   - print wifi qr code (ssid= irrigation, password= sugarloaf)
+   - print a box
 */
 
 
@@ -40,13 +36,11 @@ int address6 = 6; //start address where the "sDuration2" will be saved
 
 #define relayPin 5
 
-#define NTP_OFFSET   60 * 60 * 10      // In seconds
+#define NTP_OFFSET   36000      // In seconds utc+10 hours 
 #define NTP_ADDRESS  "au.pool.ntp.org"
 
 WiFiUDP ntpUDP;
 ESP8266WebServer server(80); //Server on port 80
-
-
 NTPClient timeClient(ntpUDP, NTP_ADDRESS, NTP_OFFSET);
 
 void setup()
@@ -59,29 +53,35 @@ void setup()
   sMinute2 = EEPROM.read(address5);
   sDuration2 = EEPROM.read(address6);
 
+  WiFiManager wm;
+  WiFi.mode(WIFI_STA);
 
-  pinMode(relayPin, OUTPUT);
   Serial.begin(115200);
 
-  //disable ap advertising
-  WiFi.mode(WIFI_STA);
-  Serial.print("Starting the connection");
-  WiFi.begin(ssid, password); // Connect to WiFi
-  while (WiFi.status() != WL_CONNECTED)
-  {
-    Alarm.delay(500);
-    Serial.print(".");
-  }
+  pinMode(relayPin, OUTPUT);
 
-  // Print local IP address and start web server
-  Serial.println("WiFi connected.");
-  Serial.println("IP address: ");
-  Serial.println(WiFi.localIP());
+  wm.setClass("invert");
+
+  bool res;
+  res = wm.autoConnect("irrigation", "sugarloaf"); // password protected ap
+  if (!res) {
+    Serial.println("Failed to connect or hit timeout");
+    // ESP.restart();
+  }
+  else {
+    //if you get here you have connected to the WiFi
+    Serial.println("connected");
+    if (MDNS.begin("irrigation")) {              // Start the mDNS responder for esp8266.local
+      Serial.println("mDNS responder started");
+    } else {
+      Serial.println("Error setting up MDNS responder!");
+    }
+  }
 
   Alarm.alarmRepeat(sHour1, sMinute1, 0, sTimer1);
   Alarm.alarmRepeat(sHour2, sMinute2, 0, sTimer2);
 
-  Alarm.alarmRepeat(1, 0, 0, ntpUpdate);
+  Alarm.alarmRepeat(1, 0, 0, ntpUpdate);        //update ntp time
   Alarm.alarmRepeat(12, 0, 0, ntpUpdate);
 
 
@@ -105,7 +105,7 @@ void setup()
   Serial.println((newtime.substring(3, 5)).toInt());
   Serial.print("Seconds : ");
   Serial.println((newtime.substring(6, 8)).toInt());
-  //Serial.println(timeClient.getFormattedDate());
+  //  Serial.println(timeClient.getFormattedDate());
   setTime((newtime.substring(0, 2)).toInt(), (newtime.substring(3, 5)).toInt(), (newtime.substring(6, 8)).toInt(), 1, 1, 20);
 }
 
@@ -115,7 +115,7 @@ void loop()
   //  printDigits(minute());
   //  printDigits(second());
   //  Serial.println();
-  Alarm.delay(1000); // show clock every second
+  //Alarm.delay(1000); // show clock every second
   server.handleClient();
 }
 
@@ -140,11 +140,13 @@ void ntpUpdate()
 {
   Alarm.delay(1000);
   timeClient.update();
+  String newtime = timeClient.getFormattedTime();
+  setTime((newtime.substring(0, 2)).toInt(), (newtime.substring(3, 5)).toInt(), (newtime.substring(6, 8)).toInt(), 1, 1, 20);
 }
 
 void handleRoot()
 {
-  server.send(200, "text/html", "<p>click the button below to view detailed instructions</p><form action=\"/info\" method=\"GET\"><input type=\"submit\" value=\"View Instructions\"></form></br><p>timer 1</p><form action=\"/save\" method=\"POST\"><input type=\"text\" name=\"hour1\" placeholder=\"hour\"></br><input type=\"text\" name=\"minute1\" placeholder=\"minutes\"></br><input type=\"text\" name=\"duration\" placeholder=\"duration eg. 3\"></br><input type=\"submit\" value=\"submit\"></form></br><p>timer 2 (set duration to 0 to disable)</p><form action=\"/save\" method=\"POST\"><input type=\"text\" name=\"hour\" placeholder=\"hour\"></br><input type=\"text\" name=\"minute\" placeholder=\"minute\"></br><input type=\"text\" name=\"duration\" placeholder=\"duration\"></br><input type=\"submit\" value=\"submit\"></form>");
+  server.send(200, "text/html", "<p>the time is:" + timeClient.getFormattedTime() + "</p></br><p>click the button below to view detailed instructions</p><form action=\"/info\" method=\"GET\"><input type=\"submit\" value=\"View Instructions\"></form></br><p>timer 1</p><form action=\"/save\" method=\"POST\"><input type=\"text\" name=\"hour1\" placeholder=\"hour\"></br><input type=\"text\" name=\"minute1\" placeholder=\"minutes\"></br><input type=\"text\" name=\"duration\" placeholder=\"duration eg. 3\"></br><input type=\"submit\" value=\"submit\"></form></br><p>timer 2 (set duration to 0 to disable)</p><form action=\"/save\" method=\"POST\"><input type=\"text\" name=\"hour\" placeholder=\"hour\"></br><input type=\"text\" name=\"minute\" placeholder=\"minute\"></br><input type=\"text\" name=\"duration\" placeholder=\"duration\"></br><input type=\"submit\" value=\"submit\"></form>");
 }
 
 void handleForm1()
@@ -201,10 +203,9 @@ void handleForm2()
 
 void handleInfo()
 {
-
-
+  server.send(200, "text/html", "<p>click the button below to<strong> go back</strong></p><form action=\"/\" method=\"GET\"><input type=\"submit\" value=\"back\"></br></br><h3>general</h3><p>fill in the fields of timer one if you want to use one timer daily; if you want to use two, fill them both out seperatly and submit with their respective submit buttons.</p><h3>hours</h3><p>the hours can range from 0-23. it is the hour of day you want it watered (in 24 hours).</p><h3>minutes<br></h3><p>can range from 0-59. this is the minute of the pre-specified hour. eg. if you entered 6 in the hour field and 44 in the minute field the timer would go off at 6:44am</p><h3>duration</h3><p>how long the timer would go for (in minutes). following on from the previous example, if duration was 6, it would run from 6:44am until 6:50am (as the duration is 6 minutes.)</p><h3>submit</h3><p>click the button to submit what you have entered in the boxes above. note: this only works for one timer so, if you want two timers you need to fill in timer1, press submit, and then fill in timer2.</p></br><p>hopefully this helps. if unsure please message.</p>");
 }
 
 void handleNotFound() {
-  server.send(404, "text/plain", "404: Not found"); // Send HTTP status 404 (Not Found) when there's no handler for the URI in the request
+  server.send(404, "text/html", "<h1>404: Not found</h1>"); // Send HTTP status 404 (Not Found) when there's no handler for the URI in the request
 }
